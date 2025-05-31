@@ -2,17 +2,18 @@ from flask import Flask, jsonify, request
 import pandas as pd
 from flask_cors import CORS
 import io
-import tempfile # Geçici dosya işlemleri için
-import os       # Dosya silme işlemleri için
+import tempfile 
+import os       
 
 app = Flask(__name__)
 
-# --- CORS Ayarları (Öncekiyle aynı, Netlify adresinizi kontrol edin) ---
+# --- CORS Ayarları (Netlify adresinizi kontrol edin) ---
 NETLIFY_SITE_URL = "https://tahminci.netlify.app" 
 origins = [NETLIFY_SITE_URL]
 if app.debug:
-    origins.append("http://127.0.0.1:5500")
-    origins.append("http://localhost:5500")
+    origins.append("http://127.0.0.1:5500") # Yerel test için
+    origins.append("http://localhost:5500") # Yerel test için
+    origins.append("http://127.0.0.1:5001") # Yerel backend için
 CORS(app, resources={r"/api/*": {"origins": origins}})
 # --- CORS Ayarları Bitişi ---
 
@@ -28,37 +29,51 @@ def upload_file():
     if file.filename == '':
         return jsonify({"error": "Dosya seçilmedi."}), 400
 
-    if file and (file.filename.endswith('.xlsx') or file.filename.endswith('.xls')):
-        temp_file_path = None # Geçici dosya yolunu saklamak için
+    # Hem .xlsx, .xls hem de .csv dosyalarını kabul et
+    if file and (file.filename.endswith('.xlsx') or file.filename.endswith('.xls') or file.filename.endswith('.csv')):
+        temp_file_path = None 
         try:
             # Dosyayı geçici bir dosyaya kaydet
-            # delete=False çünkü biz okuduktan sonra manuel sileceğiz
-            # NamedTemporaryFile context manager'dan çıkınca dosyayı siler, bu yüzden delete=False önemli
-            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as tmp:
-                file.save(tmp.name) # Flask'ın FileStorage objesinin save metodu
+            _, file_extension = os.path.splitext(file.filename)
+            with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp:
+                file.save(tmp.name) 
                 temp_file_path = tmp.name
             
-            # Pandas'ın geçici dosyadan okumasını sağla
-            df_temp = pd.read_excel(temp_file_path)
+            if file.filename.endswith('.csv'):
+                # CSV dosyasını oku
+                # Çok büyük CSV'ler için chunksize ile okuyup birleştirmek daha iyi olabilir:
+                # chunk_list = []
+                # for chunk in pd.read_csv(temp_file_path, chunksize=50000, low_memory=False): 
+                #     # low_memory=False, karışık tiplerde daha iyi tahmin yapar ama daha fazla bellek kullanabilir.
+                #     # chunksize değerini sunucu belleğinize göre ayarlayın.
+                #     chunk_list.append(chunk)
+                # df_temp = pd.concat(chunk_list, ignore_index=True)
+                # Şimdilik direkt okumayı deneyelim, eğer hala bellek sorunu olursa chunking'e geçilebilir.
+                df_temp = pd.read_csv(temp_file_path, low_memory=False)
+            else: # Excel dosyası ise
+                df_temp = pd.read_excel(temp_file_path)
             
             df_temp.columns = df_temp.columns.str.strip()
             
+            # Gerekli sütunlar aynı kalır (CSV'de de bu sütunlar olmalı)
             required_cols = ['İY', 'MS', 'EV SAHİBİ', 'DEPLASMAN', 'MS 1', 'MS 0', 'MS 2'] 
             missing_cols = [col for col in required_cols if col not in df_temp.columns]
             
             if missing_cols:
-                return jsonify({"error": f"Yüklenen dosyada eksik sütunlar var: {', '.join(missing_cols)}. Lütfen Excel dosyanızı kontrol edin."}), 400
+                return jsonify({"error": f"Yüklenen dosyada eksik sütunlar var: {', '.join(missing_cols)}. Lütfen dosyanızı kontrol edin."}), 400
 
             df_global = df_temp 
             print(f"'{file.filename}' dosyası başarıyla yüklendi ve işlendi. Boyut: {df_global.shape}")
             return jsonify({"message": "Dosya başarıyla yüklendi ve işlendi.", "shape": list(df_global.shape)}), 200
         
+        except pd.errors.ParserError as pe:
+            print(f"CSV ayrıştırma hatası: {pe}")
+            return jsonify({"error": f"CSV dosyası ayrıştırılırken bir hata oluştu. Dosya formatını (örn: ayırıcı, encoding) kontrol edin. Hata: {str(pe)}"}), 500
         except Exception as e:
             print(f"Yüklenen dosya işlenirken hata: {e}")
             return jsonify({"error": f"Dosya işlenirken bir hata oluştu: {str(e)}"}), 500
         
         finally:
-            # Geçici dosyayı her durumda silmeye çalış
             if temp_file_path and os.path.exists(temp_file_path):
                 try:
                     os.remove(temp_file_path)
@@ -66,11 +81,10 @@ def upload_file():
                 except Exception as e_remove:
                     print(f"Geçici dosya silinirken hata: {e_remove}")
     else:
-        return jsonify({"error": "Geçersiz dosya türü. Lütfen bir Excel dosyası (.xlsx veya .xls) yükleyin."}), 400
+        return jsonify({"error": "Geçersiz dosya türü. Lütfen Excel (.xlsx, .xls) veya CSV (.csv) dosyası yükleyin."}), 400
 
 # --- /api/upcoming-matches ve /api/analyze-matches fonksiyonları ve diğer kodlar aynı kalır ---
 # (calculate_detailed_statistics fonksiyonu dahil)
-
 @app.route('/api/upcoming-matches', methods=['GET'])
 def get_upcoming_matches():
     global df_global
@@ -92,8 +106,6 @@ def calculate_detailed_statistics(matches_df):
     predictions = {}
     if matches_df.empty:
         return predictions
-
-    # total_matches = len(matches_df) # Bu değişken kullanılmıyor gibi, kaldırılabilir
 
     def parse_score(score_str, separator='-'):
         try:
@@ -199,25 +211,21 @@ def analyze_matches():
 
     try:
         filters = request.json.get('filters', {})
-        selected_match_id_str = request.json.get('selected_match_id') # ID frontend'den gelmese bile (undefined -> None)
+        selected_match_id_str = request.json.get('selected_match_id') 
 
         past_matches = df_global[pd.notna(df_global['İY']) & pd.notna(df_global['MS'])].copy()
         
-        # ID sütunu Excel'de varsa ve frontend'den geçerli bir ID geldiyse, seçili maçı analizden çıkar
         if selected_match_id_str is not None and 'ID' in past_matches.columns:
             try:
-                # ID sütununun varlığından emin olduktan sonra numeric yapmayı dene
                 if pd.api.types.is_numeric_dtype(past_matches['ID']):
                     selected_match_id = int(selected_match_id_str) 
                     past_matches = past_matches[past_matches['ID'] != selected_match_id]
-                else: # Eğer ID sütunu sayısal değilse, string olarak karşılaştır veya bu adımı atla
+                else: 
                     past_matches = past_matches[past_matches['ID'].astype(str) != str(selected_match_id_str)]
-
             except ValueError:
                 print(f"Uyarı: Gelen selected_match_id ('{selected_match_id_str}') ID sütunuyla eşleştirilemedi.")
-            except Exception as e: # Daha genel bir hata yakalama
+            except Exception as e: 
                 print(f"ID ile filtreleme sırasında bir hata oluştu: {e}")
-
 
         similar_matches = past_matches.copy()
 
@@ -226,10 +234,7 @@ def analyze_matches():
                 try:
                     min_val = float(value_range['min'])
                     max_val = float(value_range['max'])
-                    # Orijinal sütunu değiştirmeden önce tip dönüşümü yapalım
-                    # Ve sadece sayısal olmayan değerleri NaN yapalım, hata vermesini engelleyelim
                     numeric_col = pd.to_numeric(similar_matches[key], errors='coerce')
-                    
                     similar_matches = similar_matches[
                         numeric_col.notna() &
                         (numeric_col >= min_val) &
