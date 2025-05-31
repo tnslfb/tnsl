@@ -1,10 +1,26 @@
 from flask import Flask, jsonify, request
 import pandas as pd
-from flask_cors import CORS
+from flask_cors import CORS # Bu satır zaten olmalı
 import io
 
 app = Flask(__name__)
-CORS(app) 
+
+# ------------ GÜNCELLENMİŞ CORS AYARLARI ------------
+# Netlify sitenizin tam adresi
+NETLIFY_SITE_URL = "https://tahminci.netlify.app" # Sizin Netlify adresiniz
+
+# İzin verilecek kaynakların listesi
+origins = [NETLIFY_SITE_URL]
+
+# Eğer yerelde hala test yapıyorsanız (debug modunda), yerel adresleri de ekleyebilirsiniz.
+if app.debug: # app.debug, Flask uygulamanızın debug modunda çalışıp çalışmadığını kontrol eder.
+    origins.append("http://127.0.0.1:5500") # VS Code Live Server için örnek port
+    origins.append("http://localhost:5500") # Başka bir örnek
+    # Frontend'inizi farklı bir portta veya direkt dosya olarak açıyorsanız,
+    # o adresleri de buraya ekleyebilirsiniz (örn: http://127.0.0.1: KENDI_PORTUNUZ)
+
+CORS(app, resources={r"/api/*": {"origins": origins}})
+# ------------ GÜNCELLENMİŞ CORS AYARLARI BİTİŞİ ------------
 
 df_global = None 
 
@@ -25,11 +41,7 @@ def upload_file():
             
             df_temp.columns = df_temp.columns.str.strip()
             
-            # 'ID' sütunu zorunlu değil, ancak varsa kullanılır.
             required_cols = ['İY', 'MS', 'EV SAHİBİ', 'DEPLASMAN', 'MS 1', 'MS 0', 'MS 2'] 
-            # Kullanıcının Excel'inde bulunması gereken temel sütunlar.
-            # Diğer oran sütunları (2.5 ALT vb.) opsiyoneldir ve varsa analiz edilir.
-
             missing_cols = [col for col in required_cols if col not in df_temp.columns]
             
             if missing_cols:
@@ -62,17 +74,12 @@ def get_upcoming_matches():
         return jsonify({"error": f"Maç verileri işlenirken bir hata oluştu: {str(e)}"}), 500
 
 def calculate_detailed_statistics(matches_df):
-    """
-    Verilen DataFrame'deki maçlar için tüm oran türlerine göre detaylı istatistikleri hesaplar.
-    Frontend'in beklediği anahtar formatına uygun çıktılar üretir (örn: ms_1_percentage, 1_5_alt_count).
-    """
     predictions = {}
     if matches_df.empty:
         return predictions
 
     total_matches = len(matches_df)
 
-    # Skorları ayrıştırmak için yardımcı fonksiyon
     def parse_score(score_str, separator='-'):
         try:
             if pd.isna(score_str) or score_str is None: return None, None
@@ -83,14 +90,12 @@ def calculate_detailed_statistics(matches_df):
         except:
             return None, None
 
-    # --- Maç Sonucu ('MS') ve İlgili İstatistikler ---
     if 'MS' in matches_df.columns:
         ms_scores = matches_df['MS'].apply(parse_score)
         valid_ms_scores = [s for s in ms_scores if s[0] is not None and s[1] is not None]
         valid_ms_count = len(valid_ms_scores)
 
         if valid_ms_count > 0:
-            # MS 1, MS 0, MS 2
             ms1_count = sum(1 for h, a in valid_ms_scores if h > a)
             ms0_count = sum(1 for h, a in valid_ms_scores if h == a)
             ms2_count = sum(1 for h, a in valid_ms_scores if h < a)
@@ -101,34 +106,29 @@ def calculate_detailed_statistics(matches_df):
             predictions['ms_2_percentage'] = (ms2_count / valid_ms_count * 100)
             predictions['ms_2_count'] = ms2_count
 
-            # Toplam Gol (Maç Sonu)
             total_goals_ms = [h + a for h, a in valid_ms_scores]
             
-            # 1.5 Alt/Üst
             alt15_ms_count = sum(1 for tg in total_goals_ms if tg < 1.5)
             ust15_ms_count = valid_ms_count - alt15_ms_count
             predictions['1_5_alt_percentage'] = (alt15_ms_count / valid_ms_count * 100)
             predictions['1_5_alt_count'] = alt15_ms_count
-            predictions['1_5_üst_percentage'] = (ust15_ms_count / valid_ms_count * 100) # Frontend key: 1_5_üst
+            predictions['1_5_üst_percentage'] = (ust15_ms_count / valid_ms_count * 100) 
             predictions['1_5_üst_count'] = ust15_ms_count
             
-            # 2.5 Alt/Üst
             alt25_ms_count = sum(1 for tg in total_goals_ms if tg < 2.5)
             ust25_ms_count = valid_ms_count - alt25_ms_count
             predictions['2_5_alt_percentage'] = (alt25_ms_count / valid_ms_count * 100)
             predictions['2_5_alt_count'] = alt25_ms_count
-            predictions['2_5_üst_percentage'] = (ust25_ms_count / valid_ms_count * 100) # Frontend key: 2_5_üst
+            predictions['2_5_üst_percentage'] = (ust25_ms_count / valid_ms_count * 100) 
             predictions['2_5_üst_count'] = ust25_ms_count
 
-            # 3.5 Alt/Üst
             alt35_ms_count = sum(1 for tg in total_goals_ms if tg < 3.5)
             ust35_ms_count = valid_ms_count - alt35_ms_count
             predictions['3_5_alt_percentage'] = (alt35_ms_count / valid_ms_count * 100)
             predictions['3_5_alt_count'] = alt35_ms_count
-            predictions['3_5_üst_percentage'] = (ust35_ms_count / valid_ms_count * 100) # Frontend key: 3_5_üst
+            predictions['3_5_üst_percentage'] = (ust35_ms_count / valid_ms_count * 100) 
             predictions['3_5_üst_count'] = ust35_ms_count
 
-            # Karşılıklı Gol (KGV/KGY)
             kgv_count = sum(1 for h, a in valid_ms_scores if h > 0 and a > 0)
             kgy_count = valid_ms_count - kgv_count
             predictions['kgv_percentage'] = (kgv_count / valid_ms_count * 100)
@@ -136,7 +136,6 @@ def calculate_detailed_statistics(matches_df):
             predictions['kgy_percentage'] = (kgy_count / valid_ms_count * 100)
             predictions['kgy_count'] = kgy_count
             
-            # Toplam Gol Aralığı (TG)
             tg_0_1_count = sum(1 for tg in total_goals_ms if tg <= 1)
             tg_2_3_count = sum(1 for tg in total_goals_ms if tg >= 2 and tg <= 3)
             tg_4_6_count = sum(1 for tg in total_goals_ms if tg >= 4 and tg <= 6)
@@ -147,17 +146,15 @@ def calculate_detailed_statistics(matches_df):
             predictions['tg_2_3_count'] = tg_2_3_count
             predictions['tg_4_6_percentage'] = (tg_4_6_count / valid_ms_count * 100)
             predictions['tg_4_6_count'] = tg_4_6_count
-            predictions['tg_7_plus_percentage'] = (tg_7_plus_count / valid_ms_count * 100) # Frontend key: tg_7+
+            predictions['tg_7_plus_percentage'] = (tg_7_plus_count / valid_ms_count * 100) 
             predictions['tg_7_plus_count'] = tg_7_plus_count
 
-    # --- İlk Yarı ('İY') ve İlgili İstatistikler ---
     if 'İY' in matches_df.columns:
         iy_scores = matches_df['İY'].apply(parse_score)
         valid_iy_scores = [s for s in iy_scores if s[0] is not None and s[1] is not None]
         valid_iy_count = len(valid_iy_scores)
 
         if valid_iy_count > 0:
-            # İY 1, İY 0, İY 2
             iy1_count = sum(1 for h, a in valid_iy_scores if h > a)
             iy0_count = sum(1 for h, a in valid_iy_scores if h == a)
             iy2_count = sum(1 for h, a in valid_iy_scores if h < a)
@@ -168,15 +165,13 @@ def calculate_detailed_statistics(matches_df):
             predictions['iy_2_percentage'] = (iy2_count / valid_iy_count * 100)
             predictions['iy_2_count'] = iy2_count
 
-            # Toplam Gol (İlk Yarı)
             total_goals_iy = [h + a for h, a in valid_iy_scores]
 
-            # İY 1.5 Alt/Üst
             alt15_iy_count = sum(1 for tg in total_goals_iy if tg < 1.5)
             ust15_iy_count = valid_iy_count - alt15_iy_count
-            predictions['iy_1_5a_percentage'] = (alt15_iy_count / valid_iy_count * 100) # Frontend key: iy_1_5a
+            predictions['iy_1_5a_percentage'] = (alt15_iy_count / valid_iy_count * 100) 
             predictions['iy_1_5a_count'] = alt15_iy_count
-            predictions['iy_1_5ü_percentage'] = (ust15_iy_count / valid_iy_count * 100) # Frontend key: iy_1_5ü
+            predictions['iy_1_5ü_percentage'] = (ust15_iy_count / valid_iy_count * 100) 
             predictions['iy_1_5ü_count'] = ust15_iy_count
             
     return predictions
@@ -194,7 +189,6 @@ def analyze_matches():
 
         past_matches = df_global[pd.notna(df_global['İY']) & pd.notna(df_global['MS'])].copy()
         
-        # ID bazlı filtreleme (opsiyonel, eğer ID varsa ve gönderildiyse)
         if selected_match_id_str is not None and 'ID' in past_matches.columns:
             try:
                 past_matches['ID_numeric'] = pd.to_numeric(past_matches['ID'], errors='coerce')
@@ -225,13 +219,12 @@ def analyze_matches():
             
         similar_matches = similar_matches.where(pd.notnull(similar_matches), None)
         
-        # Detaylı istatistikleri hesapla
         calculated_predictions = calculate_detailed_statistics(similar_matches)
         
         analysis_result = {
             "similar_matches": similar_matches.to_dict(orient='records'),
             "summary": {"count": len(similar_matches)},
-            "predictions": calculated_predictions # Hesaplanan tüm tahminleri ekle
+            "predictions": calculated_predictions 
         }
         
         return jsonify(analysis_result)
@@ -242,4 +235,3 @@ def analyze_matches():
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
-    
