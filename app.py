@@ -54,7 +54,13 @@ def upload_file():
                 df_temp = pd.read_excel(temp_file_path)
             
             df_temp.columns = df_temp.columns.str.strip()
-            
+            # app.py /api/upload fonksiyonu içinde
+            # ...
+            df_temp.columns = df_temp.columns.str.strip()
+            print("Okunan Sütun Başlıkları:", list(df_temp.columns)) # BU SATIRI EKLEYİN
+            # ...
+            required_cols = ['İY', 'MS', 'EV SAHİBİ', 'DEPLASMAN', 'MS 1', 'MS 0', 'MS 2'] 
+            # ...
             # Gerekli sütunlar aynı kalır (CSV'de de bu sütunlar olmalı)
             required_cols = ['İY', 'MS', 'EV SAHİBİ', 'DEPLASMAN', 'MS 1', 'MS 0', 'MS 2'] 
             missing_cols = [col for col in required_cols if col not in df_temp.columns]
