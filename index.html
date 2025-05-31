@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Futbol Maç Analiz Uygulaması</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Varsayılan Koyu Tema */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c; 
+            color: #e2e8f0; 
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .card {
+            background-color: #2d3748; 
+            border-radius: 0.5rem; 
+            padding: 1.5rem; 
+            margin-bottom: 1.5rem; 
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            transition: background-color 0.3s;
+        }
+        .table-header th {
+            background-color: #4a5568;
+            transition: background-color 0.3s;
+        }
+        .table-header th.sortable:hover {
+            background-color: #5a6578;
+            cursor: pointer;
+        }
+        .table-data:hover {
+            background-color: #4a5568;
+        }
+
+        /* Aydınlık Tema Sınıfı */
+        body.light-theme {
+            background-color: #f7fafc;
+            color: #1a202c;
+        }
+        body.light-theme .card {
+            background-color: #ffffff;
+            box-shadow: 0 1px 3px 0 rgba(0,0,0,.1),0 1px 2px 0 rgba(0,0,0,.06);
+        }
+        body.light-theme #uploadStatus, 
+        body.light-theme #noUpcomingMatches,
+        body.light-theme #oddsFiltersContainer p,
+        body.light-theme .odds-input-group label {
+             color: #4a5568;
+        }
+        body.light-theme .table-header th {
+            background-color: #e2e8f0;
+            color: #2d3748;
+        }
+        body.light-theme .table-header th.sortable:hover {
+            background-color: #cbd5e0;
+        }
+        body.light-theme .table-data td {
+            border-bottom-color: #e2e8f0;
+        }
+        body.light-theme .table-data:hover {
+            background-color: #edf2f7;
+        }
+        body.light-theme .input-odds {
+            background-color: #edf2f7;
+            border-color: #e2e8f0;
+            color: #2d3748;
+        }
+        body.light-theme .input-odds:disabled {
+            background-color: #f7fafc;
+            color: #a0aec0;
+        }
+        body.light-theme .filter-checkbox-label {
+             color: #2d3748;
+        }
+        body.light-theme .odds-filter-item {
+            background-color: #e9eef5;
+        }
+        body.light-theme #upcomingMatchesList li:hover, 
+        body.light-theme #upcomingMatchesList li.selected {
+            background-color: #3182ce; 
+            color: white;
+        }
+        body.light-theme .pagination-btn {
+            background-color: #edf2f7;
+            color: #4299e1;
+            border: 1px solid #4299e1;
+        }
+        body.light-theme .pagination-btn.active,
+        body.light-theme .pagination-btn:hover {
+            background-color: #4299e1;
+            color: white;
+        }
+        body.light-theme #noAnalysisResults { 
+            color: #4a5568;
+        }
+        body.light-theme #analysisSummary p { 
+             color: #4a5568;
+        }
+
+
+        .btn { padding: 0.75rem 1.5rem; border-radius: 0.375rem; font-weight: 600; transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out, border-color 0.2s ease-in-out; cursor: pointer; text-align: center; }
+        .btn-primary { background-color: #4299e1; color: white; }
+        .btn-primary:hover { background-color: #3182ce; }
+        .btn-secondary { background-color: #667eea; color:white; }
+        .btn-secondary:hover { background-color: #5a67d8; }
+        .btn-danger { background-color: #e53e3e; color:white; }
+        .btn-danger:hover { background-color: #c53030; }
+
+        .input-odds { background-color: #4a5568; border: 1px solid #718096; color: #e2e8f0; padding: 0.5rem; border-radius: 0.25rem; width: 100%; }
+        .input-odds:disabled { background-color: #384252; color: #718096; cursor: not-allowed; }
+        #upcomingMatchesList li { cursor: pointer; padding: 0.75rem; border-radius: 0.25rem; transition: background-color 0.2s ease-in-out; }
+        #upcomingMatchesList li:hover, #upcomingMatchesList li.selected { background-color: #4299e1; color: white; }
+        .odds-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
+        .odds-filter-item { background-color: #384252; padding: 0.75rem; border-radius: 0.375rem; transition: background-color 0.3s; }
+        .odds-input-group label { font-size: 0.875rem; margin-bottom: 0.25rem; color: #a0aec0; }
+        .filter-checkbox-label { display: flex; align-items: center; font-size: 0.875rem; font-weight: 500; color: #cbd5e0; margin-bottom: 0.5rem; cursor: pointer; }
+        .filter-checkbox-label input[type="checkbox"] { margin-right: 0.5rem; accent-color: #4299e1; width: 1rem; height: 1rem; }
+        #upcomingMatchesList::-webkit-scrollbar { width: 8px; }
+        #upcomingMatchesList::-webkit-scrollbar-track { background: #2d3748; border-radius: 10px; }
+        #upcomingMatchesList::-webkit-scrollbar-thumb { background: #4a5568; border-radius: 10px; }
+        #upcomingMatchesList::-webkit-scrollbar-thumb:hover { background: #718096; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #4299e1; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; display: inline-block; margin-left: 10px;}
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .pagination-controls button { margin: 0 5px; padding: 5px 10px; }
+        .table-header th { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #4a5568; }
+        .table-data td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #4a5568; }
+        .pagination-btn { margin: 0 2px; padding: 0.5rem 0.75rem; border-radius: 0.25rem; font-size: 0.875rem; }
+        .pagination-btn.active { background-color: #4299e1; color: white; font-weight: bold; }
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.5rem; } 
+    </style>
+</head>
+<body class="antialiased"> 
+    <div class="container mx-auto p-4 md:p-6 lg:p-8">
+        <header class="text-center mb-6 flex justify-between items-center">
+            <h1 class="text-3xl sm:text-4xl font-bold text-blue-400">Futbol Maç Analiz Uygulaması</h1>
+            <button id="themeToggleBtn" class="btn btn-secondary text-sm py-1 px-3">Aydınlık Tema</button>
+        </header>
+
+        <div class="card">
+            <h2 class="text-2xl font-semibold mb-4 text-blue-300">1. Adım: Veri Yükle</h2>
+            <p class="text-sm text-gray-400 mb-3">Lütfen maç verilerini içeren Excel dosyanızı (.xlsx veya .xls) seçin.</p>
+            <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-4">
+                <input type="file" id="excelFile" accept=".xlsx, .xls" class="block w-full text-sm
+                  file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold
+                  file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer flex-grow
+                "/>
+                <button id="uploadButton" class="btn btn-primary w-full sm:w-auto flex-shrink-0">Excel Yükle ve İşle</button>
+            </div>
+            <p id="uploadStatus" class="mt-3 text-sm min-h-[1.25rem]"></p> 
+        </div>
+
+        <div id="dataDependentSections" class="hidden">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+                <div class="md:col-span-1 card">
+                    <h2 class="text-2xl font-semibold mb-4 text-blue-300">2. Adım: Oynanacak Maç Seç</h2>
+                    <ul id="upcomingMatchesList" class="space-y-2 max-h-96 overflow-y-auto pr-2"></ul>
+                    <p id="noUpcomingMatches" class="text-gray-400 mt-2">Yüklü veri yok veya oynanacak maç bulunamadı.</p>
+                </div>
+
+                <div class="md:col-span-2 space-y-6">
+                    <div class="card">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-2xl font-semibold text-blue-300">3. Adım: Filtrele ve Analiz Et</h2>
+                            <button id="resetFiltersBtn" class="btn btn-danger text-sm py-1 px-3" disabled>Filtreleri Sıfırla</button>
+                        </div>
+                        <div class="mb-4 flex gap-2">
+                            <button id="selectAllFiltersBtn" class="btn btn-secondary text-xs py-1 px-2">Tümünü Seç</button>
+                            <button id="deselectAllFiltersBtn" class="btn btn-secondary text-xs py-1 px-2">Tümünü Kaldır</button>
+                        </div>
+                        <div id="selectedMatchInfo" class="mb-6 p-4 bg-gray-700 rounded-md hidden">
+                            <h3 class="text-lg font-semibold">Seçilen Maç: <span id="selectedMatchText" class="text-yellow-400"></span></h3>
+                        </div>
+                        <div id="oddsFiltersContainer" class="space-y-4">
+                            <p class="text-gray-400">Analiz için lütfen sol taraftan bir maç seçin.</p>
+                        </div>
+                        <button id="analyzeButton" class="btn btn-primary mt-6 w-full md:w-auto flex items-center justify-center" disabled>
+                            Analiz Et
+                            <span id="analyzeLoader" class="loader hidden ml-2"></span>
+                        </button>
+                    </div>
+
+                    <div class="card">
+                        <h2 class="text-2xl font-semibold mb-4 text-blue-300">Analiz Sonuçları ve Tahminler</h2>
+                        <div id="analysisResultsTableContainer" class="overflow-x-auto">
+                        </div>
+                        <div id="paginationControls" class="mt-4 text-center">
+                        </div>
+                        <div id="analysisSummary" class="mt-4">
+                        </div>
+                        <p id="noAnalysisResults" class="text-gray-400">Lütfen bir maç seçip oranları filtreledikten sonra 'Analiz Et' butonuna tıklayın.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // API Endpoint'lerini burada merkezi olarak tanımlayalım
+        const API_BASE_URL = "https://tahminci-api.onrender.com"; // SİZİN RENDER BACKEND ADRESİNİZ
+        const API_UPLOAD_URL = `${API_BASE_URL}/api/upload`;
+        const API_UPCOMING_MATCHES_URL = `${API_BASE_URL}/api/upcoming-matches`;
+        const API_ANALYZE_MATCHES_URL = `${API_BASE_URL}/api/analyze-matches`;
+
+        const excelFileInput = document.getElementById('excelFile');
+        const uploadButton = document.getElementById('uploadButton');
+        const uploadStatus = document.getElementById('uploadStatus');
+        const dataDependentSections = document.getElementById('dataDependentSections');
+        const upcomingMatchesList = document.getElementById('upcomingMatchesList');
+        const noUpcomingMatches = document.getElementById('noUpcomingMatches');
+        const selectedMatchInfo = document.getElementById('selectedMatchInfo');
+        const selectedMatchText = document.getElementById('selectedMatchText');
+        const oddsFiltersContainer = document.getElementById('oddsFiltersContainer');
+        const analyzeButton = document.getElementById('analyzeButton');
+        const analyzeLoader = document.getElementById('analyzeLoader');
+        const analysisResultsTableContainer = document.getElementById('analysisResultsTableContainer');
+        const paginationControls = document.getElementById('paginationControls');
+        const analysisSummary = document.getElementById('analysisSummary');
+        const noAnalysisResults = document.getElementById('noAnalysisResults');
+
+        const resetFiltersBtn = document.getElementById('resetFiltersBtn');
+        const selectAllFiltersBtn = document.getElementById('selectAllFiltersBtn');
+        const deselectAllFiltersBtn = document.getElementById('deselectAllFiltersBtn');
+        const themeToggleBtn = document.getElementById('themeToggleBtn');
+        
+        let selectedMatch = null; 
+        let originalSelectedMatchOdds = {}; 
+        let currentSimilarMatches = []; 
+        let currentPage = 1;
+        const MATCHES_PER_PAGE = 100;
+        let sortColumn = null;
+        let sortDirection = 'asc'; 
+
+        const oddsColumns = [
+            { key: "MS 1", label: "MS 1", type: "outcome" }, { key: "MS 0", label: "MS 0", type: "outcome" }, { key: "MS 2", label: "MS 2", type: "outcome" },
+            { key: "1.5 ALT", label: "1.5 Alt", type: "total_goals_match" }, { key: "1.5 ÜST", label: "1.5 Üst", type: "total_goals_match" },
+            { key: "2.5 ALT", label: "2.5 Alt", type: "total_goals_match" }, { key: "2.5 ÜST", label: "2.5 Üst", type: "total_goals_match" },
+            { key: "3.5 ALT", label: "3.5 Alt", type: "total_goals_match" }, { key: "3.5 ÜST", label: "3.5 Üst", type: "total_goals_match" },
+            { key: "IY 1", label: "İY 1", type: "outcome_halftime" }, { key: "IY 0", label: "İY 0", type: "outcome_halftime" }, { key: "IY 2", label: "İY 2", type: "outcome_halftime" },
+            { key: "KGV", label: "KG Var", type: "btts" }, { key: "KGY", label: "KG Yok", type: "btts" },
+            { key: "İY 1.5A", label: "İY 1.5 Alt", type: "total_goals_halftime" }, { key: "İY 1.5Ü", label: "İY 1.5 Üst", type: "total_goals_halftime" },
+            { key: "TG 0-1", label: "TG 0-1", type: "goal_range" }, { key: "TG 2-3", label: "TG 2-3", type: "goal_range" },
+            { key: "TG 4-6", label: "TG 4-6", type: "goal_range" }, { key: "TG 7+", label: "TG 7+", type: "goal_range" }
+        ];
+
+        themeToggleBtn.addEventListener('click', () => {
+            document.body.classList.toggle('light-theme');
+            if (document.body.classList.contains('light-theme')) {
+                themeToggleBtn.textContent = 'Karanlık Tema';
+                localStorage.setItem('theme', 'light');
+            } else {
+                themeToggleBtn.textContent = 'Aydınlık Tema';
+                localStorage.removeItem('theme');
+            }
+        });
+
+        resetFiltersBtn.addEventListener('click', () => {
+            if (selectedMatch) {
+                populateFiltersWithMatchData(originalSelectedMatchOdds, true); 
+            }
+        });
+
+        selectAllFiltersBtn.addEventListener('click', () => setAllFilterCheckboxes(true));
+        deselectAllFiltersBtn.addEventListener('click', () => setAllFilterCheckboxes(false));
+
+        function setAllFilterCheckboxes(isChecked) {
+            oddsColumns.forEach(col => {
+                const colKeyClean = col.key.replace(/\s+/g, '-').replace(/\./g, '');
+                const checkbox = document.getElementById(`checkbox-${colKeyClean}`);
+                if (checkbox) {
+                    checkbox.checked = isChecked;
+                    const event = new Event('change'); 
+                    checkbox.dispatchEvent(event);
+                }
+            });
+        }
+        
+        function populateFiltersWithMatchData(matchData, resetCheckboxes = false) {
+            oddsFiltersContainer.innerHTML = ''; 
+            const oddsGrid = document.createElement('div');
+            oddsGrid.className = 'odds-grid';
+            oddsColumns.forEach(col => {
+                const filterItemContainer = document.createElement('div');
+                filterItemContainer.className = 'odds-filter-item';
+                const colKeyClean = col.key.replace(/\s+/g, '-').replace(/\./g, '');
+                const checkboxLabel = document.createElement('label');
+                checkboxLabel.className = 'filter-checkbox-label';
+                checkboxLabel.htmlFor = `checkbox-${colKeyClean}`;
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `checkbox-${colKeyClean}`;
+                checkbox.dataset.filterKey = col.key; 
+                const existingCheckbox = document.getElementById(`checkbox-${colKeyClean}`);
+                checkbox.checked = resetCheckboxes ? true : (existingCheckbox ? existingCheckbox.checked : true) ; 
+                checkboxLabel.appendChild(checkbox);
+                checkboxLabel.appendChild(document.createTextNode(` ${col.label}`)); 
+                filterItemContainer.appendChild(checkboxLabel);
+                const value = (matchData[col.key] !== undefined && matchData[col.key] !== null) ? parseFloat(matchData[col.key]).toFixed(2) : '';
+                const minInput = document.createElement('input');
+                minInput.type = 'number'; minInput.step = '0.01'; minInput.id = `filter-min-${colKeyClean}`;
+                minInput.className = 'input-odds mb-1'; minInput.placeholder = 'Min'; minInput.value = value;
+                filterItemContainer.appendChild(minInput);
+                const maxInput = document.createElement('input');
+                maxInput.type = 'number'; maxInput.step = '0.01'; maxInput.id = `filter-max-${colKeyClean}`;
+                maxInput.className = 'input-odds'; maxInput.placeholder = 'Max'; maxInput.value = value;
+                filterItemContainer.appendChild(maxInput);
+                const toggleInputs = (isChecked) => {
+                    minInput.disabled = !isChecked; maxInput.disabled = !isChecked;
+                    minInput.classList.toggle('input-odds:disabled', !isChecked);
+                    maxInput.classList.toggle('input-odds:disabled', !isChecked);
+                };
+                checkbox.addEventListener('change', (event) => toggleInputs(event.target.checked));
+                toggleInputs(checkbox.checked); 
+                oddsGrid.appendChild(filterItemContainer);
+            });
+            oddsFiltersContainer.appendChild(oddsGrid);
+        }
+
+        async function handleFileUpload() {
+            const file = excelFileInput.files[0];
+            if (!file) {
+                uploadStatus.textContent = 'Lütfen bir Excel dosyası seçin.';
+                uploadStatus.className = 'mt-3 text-sm text-red-400'; return;
+            }
+            const formData = new FormData(); formData.append('file', file);
+            uploadStatus.textContent = 'Yükleniyor ve işleniyor... Lütfen bekleyin.';
+            uploadStatus.className = 'mt-3 text-sm text-yellow-400';
+            dataDependentSections.classList.add('hidden');
+            upcomingMatchesList.innerHTML = '';
+            oddsFiltersContainer.innerHTML = '<p class="text-gray-400">Analiz için lütfen bir maç seçin.</p>';
+            resetUIAfterUpload();
+            try {
+                const response = await fetch(API_UPLOAD_URL, { method: 'POST', body: formData }); // GÜNCELLENDİ
+                const result = await response.json();
+                if (response.ok && result.message) {
+                    uploadStatus.textContent = `Dosya başarıyla yüklendi. ${result.shape ? `Boyut: ${result.shape[0]} satır, ${result.shape[1]} sütun.` : ''} Maçlar listeleniyor...`;
+                    uploadStatus.className = 'mt-3 text-sm text-green-400';
+                    dataDependentSections.classList.remove('hidden');
+                    await loadUpcomingMatches();
+                } else {
+                    uploadStatus.textContent = `Hata: ${result.error || 'Dosya yüklenemedi veya işlenemedi.'}`;
+                    uploadStatus.className = 'mt-3 text-sm text-red-400';
+                }
+            } catch (error) {
+                console.error('Dosya yükleme hatası:', error);
+                uploadStatus.textContent = `Yükleme sırasında bir ağ hatası oluştu: ${error.message || 'Backend sunucusunun çalıştığından emin olun.'}`;
+                uploadStatus.className = 'mt-3 text-sm text-red-400';
+            }
+        }
+        uploadButton.addEventListener('click', handleFileUpload);
+
+        async function loadUpcomingMatches() {
+            upcomingMatchesList.innerHTML = '';
+            noUpcomingMatches.textContent = 'Oynanacak maçlar yükleniyor...';
+            noUpcomingMatches.classList.remove('hidden');
+            try {
+                const response = await fetch(API_UPCOMING_MATCHES_URL); // GÜNCELLENDİ
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+                const upcoming = await response.json();
+                if (upcoming.error) { noUpcomingMatches.textContent = `Hata: ${upcoming.error}`; return; }
+                if (!Array.isArray(upcoming) || upcoming.length === 0) { noUpcomingMatches.textContent = 'Gösterilecek oynanacak maç bulunmamaktadır.'; return; }
+                noUpcomingMatches.classList.add('hidden');
+                upcoming.forEach(match => {
+                    const listItem = document.createElement('li');
+                    const homeTeam = match["EV SAHİBİ"] || 'Bilinmeyen Takım';
+                    const awayTeam = match["DEPLASMAN"] || 'Bilinmeyen Takım';
+                    let matchDateText = '';
+                    if (match["TARİH"]) {
+                        try {
+                            const dateObj = new Date(match["TARİH"]);
+                            if (!isNaN(dateObj.getTime())) { matchDateText = ` (${dateObj.toLocaleDateString('tr-TR')})`; } 
+                            else { matchDateText = ` (${match["TARİH"]})`; }
+                        } catch (e) { matchDateText = ` (${match["TARİH"]})`; }
+                    }
+                    listItem.textContent = `${homeTeam} vs ${awayTeam}${matchDateText}`;
+                    listItem.dataset.matchId = match.ID; 
+                    listItem.addEventListener('click', () => selectMatch(match));
+                    upcomingMatchesList.appendChild(listItem);
+                });
+            } catch (error) {
+                console.error("Oynanacak maçlar yüklenirken hata oluştu:", error);
+                noUpcomingMatches.textContent = `Maçlar yüklenirken bir sorun oluştu: ${error.message || 'Bilinmeyen bir hata.'}`;
+            }
+        }
+
+        function selectMatch(match) {
+            selectedMatch = match; originalSelectedMatchOdds = { ...match }; 
+            const currentlySelected = upcomingMatchesList.querySelector('.selected');
+            if (currentlySelected) currentlySelected.classList.remove('selected');
+            const listItems = upcomingMatchesList.getElementsByTagName('li');
+            for (let item of listItems) {
+                if (match.ID && item.dataset.matchId === String(match.ID)) { item.classList.add('selected'); break; } 
+                else if (item.textContent.includes(match["EV SAHİBİ"]) && item.textContent.includes(match["DEPLASMAN"])) { item.classList.add('selected');}
+            }
+            selectedMatchInfo.classList.remove('hidden');
+            selectedMatchText.textContent = `${match["EV SAHİBİ"] || ''} vs ${match["DEPLASMAN"] || ''}`;
+            populateFiltersWithMatchData(match, true); 
+            analyzeButton.disabled = false; resetFiltersBtn.disabled = false;
+            analysisResultsTableContainer.innerHTML = ''; paginationControls.innerHTML = '';
+            analysisSummary.innerHTML = '';
+            noAnalysisResults.textContent = 'Filtreler güncellendi. Analiz için butona tıklayın.';
+            noAnalysisResults.classList.remove('hidden');
+        }
+
+        analyzeButton.addEventListener('click', async () => {
+            if (!selectedMatch) { displayErrorMessage(analysisResultsTableContainer, 'Lütfen önce bir maç seçin.'); return; }
+            analyzeButton.disabled = true; analyzeLoader.classList.remove('hidden');
+            noAnalysisResults.textContent = 'Analiz ediliyor...'; noAnalysisResults.classList.remove('hidden');
+            analysisResultsTableContainer.innerHTML = ''; paginationControls.innerHTML = ''; analysisSummary.innerHTML = '';
+            const currentFilters = {}; let allFiltersValid = true; 
+            oddsColumns.forEach(col => {
+                const colKeyClean = col.key.replace(/\s+/g, '-').replace(/\./g, '');
+                const checkbox = document.getElementById(`checkbox-${colKeyClean}`);
+                if (checkbox && checkbox.checked) {
+                    const minInput = document.getElementById(`filter-min-${colKeyClean}`);
+                    const maxInput = document.getElementById(`filter-max-${colKeyClean}`);
+                    if (!minInput || !maxInput) return; 
+                    const minValStr = minInput.value.trim(); const maxValStr = maxInput.value.trim();
+                    minInput.classList.remove('border-red-500'); maxInput.classList.remove('border-red-500'); 
+                    if (minValStr === '' && maxValStr === '') { currentFilters[col.key] = null; return; }
+                    let parsedMinVal = -Infinity; let parsedMaxVal = Infinity; let currentFilterValid = true;
+                    if (minValStr !== '') {
+                        parsedMinVal = parseFloat(minValStr);
+                        if (isNaN(parsedMinVal)) { allFiltersValid = false; currentFilterValid = false; minInput.classList.add('border-red-500');}
+                    }
+                    if (maxValStr !== '') {
+                        parsedMaxVal = parseFloat(maxValStr);
+                        if (isNaN(parsedMaxVal)) { allFiltersValid = false; currentFilterValid = false; maxInput.classList.add('border-red-500');}
+                    }
+                    if (currentFilterValid && parsedMinVal > parsedMaxVal) {
+                        allFiltersValid = false; minInput.classList.add('border-red-500'); maxInput.classList.add('border-red-500');
+                    }
+                    if (currentFilterValid && parsedMinVal <= parsedMaxVal) { 
+                         currentFilters[col.key] = { min: parsedMinVal, max: parsedMaxVal };
+                    }
+                }
+            });
+            if (!allFiltersValid) {
+                 displayErrorMessage(analysisResultsTableContainer, 'Lütfen aktif filtrelerdeki tüm oran aralıklarını doğru girin (Min <= Max ve geçerli sayılar olmalı).');
+                 analyzeButton.disabled = false; analyzeLoader.classList.add('hidden');
+                 noAnalysisResults.textContent = 'Hatalı filtre girişi.'; return;
+            }
+            try {
+                const payload = { filters: currentFilters, selected_match_id: selectedMatch ? selectedMatch.ID : null };
+                const response = await fetch(API_ANALYZE_MATCHES_URL, { // GÜNCELLENDİ
+                    method: 'POST', headers: { 'Content-Type': 'application/json', }, body: JSON.stringify(payload),
+                });
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+                const result = await response.json();
+                if (result.error) { displayErrorMessage(analysisResultsTableContainer, `Analiz hatası: ${result.error}`); return; }
+                currentSimilarMatches = result.similar_matches || [];
+                currentPage = 1; sortColumn = null; sortDirection = 'asc';
+                displayAnalysis(result.predictions);
+            } catch (error) {
+                console.error("Analiz sırasında hata oluştu:", error);
+                displayErrorMessage(analysisResultsTableContainer, `Analiz sırasında bir sorun oluştu: ${error.message || 'Bilinmeyen bir hata.'}`);
+            } finally {
+                analyzeButton.disabled = false; analyzeLoader.classList.add('hidden');
+            }
+        });
+        
+        function displayAnalysis(predictionsData) {
+            if (currentSimilarMatches.length > 0) {
+                noAnalysisResults.classList.add('hidden');
+                renderTablePage(); 
+                renderAnalysisSummary(predictionsData, currentSimilarMatches.length);
+            } else {
+                analysisResultsTableContainer.innerHTML = ''; paginationControls.innerHTML = '';
+                analysisSummary.innerHTML = '';
+                noAnalysisResults.textContent = 'Seçili filtrelere uyan benzer geçmiş maç bulunamadı.';
+                noAnalysisResults.classList.remove('hidden');
+            }
+        }
+
+        function renderTablePage() {
+            analysisResultsTableContainer.innerHTML = ''; paginationControls.innerHTML = ''; 
+            if (!currentSimilarMatches || currentSimilarMatches.length === 0) return;
+            if (sortColumn) {
+                currentSimilarMatches.sort((a, b) => {
+                    let valA = a[sortColumn]; let valB = b[sortColumn];
+                    if (typeof valA === 'number' && typeof valB === 'number') { return sortDirection === 'asc' ? valA - valB : valB - valA; } 
+                    else { valA = String(valA || '').toLowerCase(); valB = String(valB || '').toLowerCase();
+                        if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+                        if (valA > valB) return sortDirection === 'asc' ? 1 : -1; return 0;
+                    }
+                });
+            }
+            const startIndex = (currentPage - 1) * MATCHES_PER_PAGE;
+            const endIndex = startIndex + MATCHES_PER_PAGE;
+            const paginatedMatches = currentSimilarMatches.slice(startIndex, endIndex);
+            const table = document.createElement('table'); table.className = 'w-full text-sm min-w-max'; 
+            const thead = table.createTHead(); thead.className = 'table-header';
+            const headerRow = thead.insertRow(); const headers = ['Ev Sahibi', 'Deplasman', 'İY', 'MS'];
+            oddsColumns.slice(0, 4).forEach(col => headers.push(col.label)); 
+            headers.forEach(text => {
+                const th = document.createElement('th'); th.textContent = text; th.className = 'sortable'; 
+                let columnKey = text; 
+                if(text === 'Ev Sahibi') columnKey = 'EV SAHİBİ';
+                else if(text === 'Deplasman') columnKey = 'DEPLASMAN';
+                else if(text === 'İY') columnKey = 'İY'; else if(text === 'MS') columnKey = 'MS';
+                else { const foundOddCol = oddsColumns.find(oc => oc.label === text); if(foundOddCol) columnKey = foundOddCol.key;}
+                th.dataset.columnKey = columnKey;
+                th.addEventListener('click', () => handleSort(columnKey));
+                headerRow.appendChild(th);
+            });
+            const tbody = table.createTBody();
+            paginatedMatches.forEach(match => {
+                const row = tbody.insertRow(); row.className = 'table-data';
+                const cells = [match["EV SAHİBİ"], match["DEPLASMAN"], match["İY"], match["MS"]];
+                oddsColumns.slice(0, 4).forEach(col => { const val = match[col.key]; cells.push(typeof val === 'number' ? val.toFixed(2) : (val || '-'));});
+                cells.forEach(cellData => { const cell = row.insertCell(); cell.textContent = cellData || '-';});
+            });
+            analysisResultsTableContainer.appendChild(table); renderPagination();
+        }
+        
+        function handleSort(columnKey) {
+            if (sortColumn === columnKey) { sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';} 
+            else { sortColumn = columnKey; sortDirection = 'asc';}
+            currentPage = 1; renderTablePage(); 
+        }
+
+        function renderPagination() {
+            paginationControls.innerHTML = ''; 
+            const totalPages = Math.ceil(currentSimilarMatches.length / MATCHES_PER_PAGE);
+            if (totalPages <= 1) return; 
+            for (let i = 1; i <= totalPages; i++) {
+                const pageButton = document.createElement('button'); pageButton.textContent = i;
+                pageButton.className = 'btn pagination-btn';
+                if (i === currentPage) { pageButton.classList.add('active');}
+                pageButton.addEventListener('click', () => { currentPage = i; renderTablePage();});
+                paginationControls.appendChild(pageButton);
+            }
+        }
+        
+        function renderAnalysisSummary(predictions, count) {
+            analysisSummary.innerHTML = ''; 
+            if (!predictions || Object.keys(predictions).length === 0) {
+                 analysisSummary.innerHTML = `<p class="mt-4 text-sm text-gray-400">${count} benzer maç bulundu ama detaylı tahmin istatistiği üretilemedi.</p>`; return;
+            }
+            let summaryHTML = `<h3 class="text-xl font-semibold mt-6 mb-3 text-green-400">${count} Benzer Maç İçin Olası Tahminler:</h3>`;
+            summaryHTML += `<div class="summary-grid">`; 
+            oddsColumns.forEach(col => {
+                const baseKey = col.key.toLowerCase().replace(/\s+/g, '_').replace(/\./g, '').replace(/\+/g, '_plus'); // TG 7+ için
+                const predictionKey = `${baseKey}_percentage`;
+                const countKey = `${baseKey}_count`;
+                if (predictions[predictionKey] !== undefined && predictions[countKey] !== undefined) {
+                    summaryHTML += `<div>${col.label} Olma Yüzdesi: <strong>${predictions[predictionKey].toFixed(1)}%</strong> (${predictions[countKey] || 0} maç)</div>`;
+                }
+            });
+            summaryHTML += `</div>`; 
+            summaryHTML += `<p class="mt-4 text-sm text-gray-400">Not: Bu tahminler sadece benzer oranlara sahip geçmiş maçların istatistiklerine dayanmaktadır.</p>`;
+            analysisSummary.innerHTML = summaryHTML;
+        }
+
+        function displayErrorMessage(containerElement, message) {
+            if (containerElement) { containerElement.innerHTML = `<p class="text-red-400">${message}</p>`;}
+            noAnalysisResults.textContent = message; noAnalysisResults.className = 'text-red-400';
+            noAnalysisResults.classList.remove('hidden');
+            analysisSummary.innerHTML = ''; paginationControls.innerHTML = '';
+        }
+        
+        function resetUIAfterUpload() {
+            analysisResultsTableContainer.innerHTML = ''; paginationControls.innerHTML = '';
+            analysisSummary.innerHTML = '';
+            noAnalysisResults.textContent = 'Lütfen bir maç seçip oranları filtreledikten sonra \'Analiz Et\' butonuna tıklayın.';
+            noAnalysisResults.classList.remove('hidden'); selectedMatch = null;
+            originalSelectedMatchOdds = {}; currentSimilarMatches = []; currentPage = 1;
+            sortColumn = null; resetFiltersBtn.disabled = true;
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            noUpcomingMatches.classList.remove('hidden'); 
+            oddsFiltersContainer.innerHTML = '<p class="text-gray-400">Lütfen önce bir Excel dosyası yükleyin ve ardından bir maç seçin.</p>';
+            resetFiltersBtn.disabled = true; noAnalysisResults.classList.remove('hidden'); 
+            if (localStorage.getItem('theme') === 'light') {
+                document.body.classList.add('light-theme');
+                themeToggleBtn.textContent = 'Karanlık Tema';
+            } else { themeToggleBtn.textContent = 'Aydınlık Tema';}
+        });
+    </script>
+</body>
+</html>
