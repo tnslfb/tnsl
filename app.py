@@ -8,12 +8,12 @@ import os
 app = Flask(__name__)
 
 # --- CORS Ayarları (Netlify adresinizi kontrol edin) ---
-NETLIFY_SITE_URL = "https://tahminci.netlify.app" 
+NETLIFY_SITE_URL = "https://tahminci.netlify.app"
 origins = [NETLIFY_SITE_URL]
 if app.debug:
-    origins.append("http://127.0.0.1:5500") # Yerel test için
-    origins.append("http://localhost:5500") # Yerel test için
-    origins.append("http://127.0.0.1:5001") # Yerel backend için
+    origins.append("http://127.0.0.1:5500")
+    origins.append("http://localhost:5500")
+    origins.append("http://127.0.0.1:5001")
 CORS(app, resources={r"/api/*": {"origins": origins}})
 # --- CORS Ayarları Bitişi ---
 
