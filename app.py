@@ -1,26 +1,20 @@
 from flask import Flask, jsonify, request
 import pandas as pd
-from flask_cors import CORS # Bu satır zaten olmalı
+from flask_cors import CORS
 import io
+import tempfile # Geçici dosya işlemleri için
+import os       # Dosya silme işlemleri için
 
 app = Flask(__name__)
 
-# ------------ GÜNCELLENMİŞ CORS AYARLARI ------------
-# Netlify sitenizin tam adresi
-NETLIFY_SITE_URL = "https://tahminci.netlify.app" # Sizin Netlify adresiniz
-
-# İzin verilecek kaynakların listesi
+# --- CORS Ayarları (Öncekiyle aynı, Netlify adresinizi kontrol edin) ---
+NETLIFY_SITE_URL = "https://tahminci.netlify.app" 
 origins = [NETLIFY_SITE_URL]
-
-# Eğer yerelde hala test yapıyorsanız (debug modunda), yerel adresleri de ekleyebilirsiniz.
-if app.debug: # app.debug, Flask uygulamanızın debug modunda çalışıp çalışmadığını kontrol eder.
-    origins.append("http://127.0.0.1:5500") # VS Code Live Server için örnek port
-    origins.append("http://localhost:5500") # Başka bir örnek
-    # Frontend'inizi farklı bir portta veya direkt dosya olarak açıyorsanız,
-    # o adresleri de buraya ekleyebilirsiniz (örn: http://127.0.0.1: KENDI_PORTUNUZ)
-
+if app.debug:
+    origins.append("http://127.0.0.1:5500")
+    origins.append("http://localhost:5500")
 CORS(app, resources={r"/api/*": {"origins": origins}})
-# ------------ GÜNCELLENMİŞ CORS AYARLARI BİTİŞİ ------------
+# --- CORS Ayarları Bitişi ---
 
 df_global = None 
 
@@ -35,9 +29,17 @@ def upload_file():
         return jsonify({"error": "Dosya seçilmedi."}), 400
 
     if file and (file.filename.endswith('.xlsx') or file.filename.endswith('.xls')):
+        temp_file_path = None # Geçici dosya yolunu saklamak için
         try:
-            excel_data = io.BytesIO(file.read())
-            df_temp = pd.read_excel(excel_data) 
+            # Dosyayı geçici bir dosyaya kaydet
+            # delete=False çünkü biz okuduktan sonra manuel sileceğiz
+            # NamedTemporaryFile context manager'dan çıkınca dosyayı siler, bu yüzden delete=False önemli
+            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as tmp:
+                file.save(tmp.name) # Flask'ın FileStorage objesinin save metodu
+                temp_file_path = tmp.name
+            
+            # Pandas'ın geçici dosyadan okumasını sağla
+            df_temp = pd.read_excel(temp_file_path)
             
             df_temp.columns = df_temp.columns.str.strip()
             
@@ -50,11 +52,24 @@ def upload_file():
             df_global = df_temp 
             print(f"'{file.filename}' dosyası başarıyla yüklendi ve işlendi. Boyut: {df_global.shape}")
             return jsonify({"message": "Dosya başarıyla yüklendi ve işlendi.", "shape": list(df_global.shape)}), 200
+        
         except Exception as e:
             print(f"Yüklenen dosya işlenirken hata: {e}")
             return jsonify({"error": f"Dosya işlenirken bir hata oluştu: {str(e)}"}), 500
+        
+        finally:
+            # Geçici dosyayı her durumda silmeye çalış
+            if temp_file_path and os.path.exists(temp_file_path):
+                try:
+                    os.remove(temp_file_path)
+                    print(f"Geçici dosya silindi: {temp_file_path}")
+                except Exception as e_remove:
+                    print(f"Geçici dosya silinirken hata: {e_remove}")
     else:
         return jsonify({"error": "Geçersiz dosya türü. Lütfen bir Excel dosyası (.xlsx veya .xls) yükleyin."}), 400
+
+# --- /api/upcoming-matches ve /api/analyze-matches fonksiyonları ve diğer kodlar aynı kalır ---
+# (calculate_detailed_statistics fonksiyonu dahil)
 
 @app.route('/api/upcoming-matches', methods=['GET'])
 def get_upcoming_matches():
@@ -78,7 +93,7 @@ def calculate_detailed_statistics(matches_df):
     if matches_df.empty:
         return predictions
 
-    total_matches = len(matches_df)
+    # total_matches = len(matches_df) # Bu değişken kullanılmıyor gibi, kaldırılabilir
 
     def parse_score(score_str, separator='-'):
         try:
@@ -176,7 +191,6 @@ def calculate_detailed_statistics(matches_df):
             
     return predictions
 
-
 @app.route('/api/analyze-matches', methods=['POST'])
 def analyze_matches():
     global df_global
@@ -185,20 +199,25 @@ def analyze_matches():
 
     try:
         filters = request.json.get('filters', {})
-        selected_match_id_str = request.json.get('selected_match_id')
+        selected_match_id_str = request.json.get('selected_match_id') # ID frontend'den gelmese bile (undefined -> None)
 
         past_matches = df_global[pd.notna(df_global['İY']) & pd.notna(df_global['MS'])].copy()
         
+        # ID sütunu Excel'de varsa ve frontend'den geçerli bir ID geldiyse, seçili maçı analizden çıkar
         if selected_match_id_str is not None and 'ID' in past_matches.columns:
             try:
-                past_matches['ID_numeric'] = pd.to_numeric(past_matches['ID'], errors='coerce')
-                selected_match_id = int(selected_match_id_str) 
-                past_matches = past_matches[past_matches['ID_numeric'].notna() & (past_matches['ID_numeric'] != selected_match_id)]
-                past_matches = past_matches.drop(columns=['ID_numeric']) 
+                # ID sütununun varlığından emin olduktan sonra numeric yapmayı dene
+                if pd.api.types.is_numeric_dtype(past_matches['ID']):
+                    selected_match_id = int(selected_match_id_str) 
+                    past_matches = past_matches[past_matches['ID'] != selected_match_id]
+                else: # Eğer ID sütunu sayısal değilse, string olarak karşılaştır veya bu adımı atla
+                    past_matches = past_matches[past_matches['ID'].astype(str) != str(selected_match_id_str)]
+
             except ValueError:
-                print(f"Uyarı: Gelen selected_match_id ('{selected_match_id_str}') integer değil veya ID sütunu sayısal değil.")
-            except Exception as e:
-                print(f"ID ile filtreleme sırasında hata: {e}")
+                print(f"Uyarı: Gelen selected_match_id ('{selected_match_id_str}') ID sütunuyla eşleştirilemedi.")
+            except Exception as e: # Daha genel bir hata yakalama
+                print(f"ID ile filtreleme sırasında bir hata oluştu: {e}")
+
 
         similar_matches = past_matches.copy()
 
@@ -207,18 +226,20 @@ def analyze_matches():
                 try:
                     min_val = float(value_range['min'])
                     max_val = float(value_range['max'])
-                    similar_matches[key] = pd.to_numeric(similar_matches[key], errors='coerce')
+                    # Orijinal sütunu değiştirmeden önce tip dönüşümü yapalım
+                    # Ve sadece sayısal olmayan değerleri NaN yapalım, hata vermesini engelleyelim
+                    numeric_col = pd.to_numeric(similar_matches[key], errors='coerce')
+                    
                     similar_matches = similar_matches[
-                        similar_matches[key].notna() &
-                        (similar_matches[key] >= min_val) &
-                        (similar_matches[key] <= max_val)
+                        numeric_col.notna() &
+                        (numeric_col >= min_val) &
+                        (numeric_col <= max_val)
                     ]
                 except (ValueError, TypeError) as e:
                     print(f"Uyarı: '{key}' için oran filtresi uygulanırken hata: {e}. Bu filtre atlanıyor.")
                     continue
             
         similar_matches = similar_matches.where(pd.notnull(similar_matches), None)
-        
         calculated_predictions = calculate_detailed_statistics(similar_matches)
         
         analysis_result = {
@@ -226,7 +247,6 @@ def analyze_matches():
             "summary": {"count": len(similar_matches)},
             "predictions": calculated_predictions 
         }
-        
         return jsonify(analysis_result)
 
     except Exception as e:
